@@ -87,12 +87,13 @@ socket.on('updatePlayers', (backendPlayers) => {
         parentDiv.appendChild(div)
       })
 
+      frontEndPlayers[id].target = {
+        x: backEndPlayer.x,
+        y: backEndPlayer.y
+      }
+
 
       if (id === socket.id) {
-      // if player already exists, just update its position
-      frontEndPlayers[id].x = backEndPlayer.x
-      frontEndPlayers[id].y = backEndPlayer.y
-
       const lastBackendInputIndex =  playerInputs.findIndex(input => {
         return backEndPlayer.sequenceNumber === input.sequenceNumber
       })
@@ -101,18 +102,9 @@ socket.on('updatePlayers', (backendPlayers) => {
       playerInputs.splice(0, lastBackendInputIndex + 1)
       }
        playerInputs.forEach(input => {
-        frontEndPlayers[id].x += input.dx
-        frontEndPlayers[id].y += input.dy
+        frontEndPlayers[id].target.x += input.dx
+        frontEndPlayers[id].target.y += input.dy
        })
-      }  else {
-        // for all other players
-
-        gsap.to(frontEndPlayers[id], {
-          x: backEndPlayer.x,
-          y: backEndPlayer.y,
-          duration: 0.015,
-          ease: 'linear'
-        })
       }
     }
   }
@@ -139,6 +131,12 @@ function animate() {
   
   for(const id in frontEndPlayers) {
     const frontEndPlayer = frontEndPlayers[id]
+    // linear interpolation
+    if (frontEndPlayer.target) {
+      frontEndPlayers[id].x += (frontEndPlayers[id].target.x - frontEndPlayers[id].x) * 0.5
+      frontEndPlayers[id].y += (frontEndPlayers[id].target.y - frontEndPlayers[id].y) * 0.5
+    }
+
     frontEndPlayer.draw()
   }
 
