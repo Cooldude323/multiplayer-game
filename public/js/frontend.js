@@ -12,6 +12,17 @@ canvas.height = 576 * devicePixelRatio
  
 c.scale(devicePixelRatio, devicePixelRatio)
 
+// World boundaries
+const WORLD_WIDTH = 2048
+const WORLD_HEIGHT = 1536
+
+// Camera instance
+let camera = null
+
+// Background image for tiling
+const bgImage = new Image()
+bgImage.src = '/img/webb-dark.png'
+
 const x = canvas.width / 2
 const y = canvas.height / 2
 
@@ -126,9 +137,63 @@ socket.on('updatePlayers', (backendPlayers) => {
 let animationId
 function animate() {
   animationId = requestAnimationFrame(animate)
- // c.fillStyle = 'rgba(0, 0, 0, 0.1)'
-  c.clearRect(0, 0, canvas.width, canvas.height)
   
+  // Initialize camera if not already done
+  if (!camera && frontEndPlayers[socket.id]) {
+    camera = new Camera({
+      x: 0,
+      y: 0,
+      width: canvas.width / devicePixelRatio,
+      height: canvas.height / devicePixelRatio
+    })
+  }
+  
+  // Update camera to follow player
+  if (camera && frontEndPlayers[socket.id]) {
+    const player = frontEndPlayers[socket.id]
+    camera.x = player.x - (canvas.width / devicePixelRatio) / 2
+    camera.y = player.y - (canvas.height / devicePixelRatio) / 2
+    
+    // Clamp camera to world bounds
+    if (camera.x < 0) camera.x = 0
+    if (camera.y < 0) camera.y = 0
+    if (camera.x + canvas.width / devicePixelRatio > WORLD_WIDTH) {
+      camera.x = WORLD_WIDTH - canvas.width / devicePixelRatio
+    }
+    if (camera.y + canvas.height / devicePixelRatio > WORLD_HEIGHT) {
+      camera.y = WORLD_HEIGHT - canvas.height / devicePixelRatio
+    }
+  }
+  
+  // Clear canvas with base color
+  c.fillStyle = '#94a3b8'
+  c.fillRect(0, 0, canvas.width, canvas.height)
+
+  // Save canvas state and apply camera translation
+  c.save()
+  if (camera) {
+    c.translate(-camera.x * devicePixelRatio, -camera.y * devicePixelRatio)
+  }
+  
+  // Draw tiled background image in world space
+  if (camera && bgImage.complete) {
+    const tileWidth = bgImage.width
+    const tileHeight = bgImage.height
+    
+    // Calculate which tiles are visible
+    const startTileX = Math.floor(camera.x / tileWidth)
+    const startTileY = Math.floor(camera.y / tileHeight)
+    const endTileX = Math.ceil((camera.x + canvas.width / devicePixelRatio) / tileWidth)
+    const endTileY = Math.ceil((camera.y + canvas.height / devicePixelRatio) / tileHeight)
+    
+    // Draw visible tiles
+    for (let tileY = startTileY; tileY < endTileY; tileY++) {
+      for (let tileX = startTileX; tileX < endTileX; tileX++) {
+        c.drawImage(bgImage, tileX * tileWidth, tileY * tileHeight)
+      }
+    }
+  }
+
   for(const id in frontEndPlayers) {
     const frontEndPlayer = frontEndPlayers[id]
     // linear interpolation
@@ -145,6 +210,8 @@ function animate() {
     frontEndProjectile.draw()
   }
   
+  // Restore canvas state
+  c.restore()
 }
 
 animate()

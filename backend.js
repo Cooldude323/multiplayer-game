@@ -10,7 +10,6 @@ const io = new Server(server, { pingInterval: 2000, pingTimeout: 5000 })
 
 const port = process.env.PORT || 3000;
 
-
 app.use(express.static('public'))
 
 app.get('/', (req, res) => {
@@ -22,6 +21,8 @@ const backEndProjectiles = {}
 const SPEED = 5
 const RADIUS = 10
 const PROJECTILE_RADIUS = 5 
+const WORLD_WIDTH = 2048
+const WORLD_HEIGHT = 1536
 let projectileId = 0
 
 io.on('connection', (socket) => {
@@ -36,8 +37,8 @@ io.on('connection', (socket) => {
       projectileId++;
 
          const velocity = {
-         x: Math.cos(angle) * 5,
-         y: Math.sin(angle) * 5
+         x: Math.cos(angle) * 10,
+         y: Math.sin(angle) * 10
           }
       backEndProjectiles[projectileId] = {
         x, 
@@ -51,8 +52,8 @@ io.on('connection', (socket) => {
 
     socket.on('initGame', ({username, width, height,  }) => {
       backEndPlayers[socket.id] = {
-     x: 1024 * Math.random(),
-     y: 576 * Math.random(),
+     x: WORLD_WIDTH * Math.random(),
+     y: WORLD_HEIGHT * Math.random(),
      color: `hsl(${360 * Math.random()}, 100%, 50%)`,
      sequenceNumber: 0,
      score: 0,
@@ -104,9 +105,9 @@ io.on('connection', (socket) => {
         bottom: backEndPlayer.y + backEndPlayer.radius
       }
       if (playerSides.left < 0) backEndPlayer.x = backEndPlayer.radius
-      if (playerSides.right > 1024) backEndPlayer.x = 1024 - backEndPlayer.radius
+      if (playerSides.right > WORLD_WIDTH) backEndPlayer.x = WORLD_WIDTH - backEndPlayer.radius
       if (playerSides.top < 0) backEndPlayer.y = backEndPlayer.radius
-      if (playerSides.bottom > 576) backEndPlayer.y = 576 - backEndPlayer.radius
+      if (playerSides.bottom > WORLD_HEIGHT) backEndPlayer.y = WORLD_HEIGHT - backEndPlayer.radius
  })
 })
 // backend ticker
@@ -121,17 +122,14 @@ setInterval(() => {
       // remove projectiles that are out of bounds
       const PROJECTILE_RADIUS = 5 
       if (
-        backEndProjectiles[id].x - PROJECTILE_RADIUS >= 
-         backEndPlayers [backEndProjectiles[id].playerId]?.canvas?.width ||
+        backEndProjectiles[id].x - PROJECTILE_RADIUS >= WORLD_WIDTH ||
         backEndProjectiles[id].x + PROJECTILE_RADIUS <= 0 ||
-         backEndProjectiles[id].y - PROJECTILE_RADIUS >= 
-          backEndPlayers [backEndProjectiles[id].playerId]?.canvas?.height ||
+        backEndProjectiles[id].y - PROJECTILE_RADIUS >= WORLD_HEIGHT ||
         backEndProjectiles[id].y + PROJECTILE_RADIUS <= 0 
-        
       ) {
         delete backEndProjectiles[id]
         continue
-        }
+      }
 
       for (const playerId in backEndPlayers) {
         const backEndPlayer = backEndPlayers[playerId]

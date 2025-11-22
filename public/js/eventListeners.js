@@ -1,34 +1,34 @@
 addEventListener('click', (event) => {
+  if (!frontEndPlayers[socket.id] || !camera) return
+  
   const canvas = document.querySelector('canvas')
   const {top, left} = canvas.getBoundingClientRect()
+  
+  // Get screen coordinates relative to canvas
+  const screenX = (event.clientX - left) / devicePixelRatio
+  const screenY = (event.clientY - top) / devicePixelRatio
+  
+  // Convert to world coordinates using camera
+  const worldCoords = {
+    x: screenX + camera.x,
+    y: screenY + camera.y
+  }
+  
   const playerPosition = {
     x: frontEndPlayers[socket.id].x,
     y: frontEndPlayers[socket.id].y
   }
+  
   const angle = Math.atan2(
-    (event.clientY - top) - playerPosition.y,
-    (event.clientX - left) - playerPosition.x
+    worldCoords.y - playerPosition.y,
+    worldCoords.x - playerPosition.x
   )
- // const velocity = { 
- //   x: Math.cos(angle) * 5,
- //   y: Math.sin(angle) * 5
- //}
 
   socket.emit('shoot',{
     x: playerPosition.x,
     y: playerPosition.y,
     angle
-    
-   }) 
- // frontEndProjectiles.push(
-   // new Projectile({
-    //x: playerPosition.x,
-  //  y: playerPosition.y,
-  //  radius: 5,
-   // color: 'white',
- //   velocity
- //  })
- // )
+  }) 
 
   console.log(frontEndProjectiles)
 })
