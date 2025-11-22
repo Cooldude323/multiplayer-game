@@ -109,6 +109,27 @@ io.on('connection', (socket) => {
       if (playerSides.top < 0) backEndPlayer.y = backEndPlayer.radius
       if (playerSides.bottom > WORLD_HEIGHT) backEndPlayer.y = WORLD_HEIGHT - backEndPlayer.radius
  })
+
+    // Handle joystick/move events from clients (dx/dy are local-prediction deltas)
+    socket.on('move', ({dx, dy, sequenceNumber}) => {
+      const backEndPlayer = backEndPlayers[socket.id]
+      if (!backEndPlayer) return
+      backEndPlayer.sequenceNumber = sequenceNumber
+      backEndPlayer.x += dx
+      backEndPlayer.y += dy
+
+      // clamp to world bounds using radius
+      const playerSides = {
+        left: backEndPlayer.x - backEndPlayer.radius,
+        right: backEndPlayer.x + backEndPlayer.radius,
+        top: backEndPlayer.y - backEndPlayer.radius,
+        bottom: backEndPlayer.y + backEndPlayer.radius
+      }
+      if (playerSides.left < 0) backEndPlayer.x = backEndPlayer.radius
+      if (playerSides.right > WORLD_WIDTH) backEndPlayer.x = WORLD_WIDTH - backEndPlayer.radius
+      if (playerSides.top < 0) backEndPlayer.y = backEndPlayer.radius
+      if (playerSides.bottom > WORLD_HEIGHT) backEndPlayer.y = WORLD_HEIGHT - backEndPlayer.radius
+    })
 })
 // backend ticker
 setInterval(() => {

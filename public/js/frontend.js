@@ -5,12 +5,41 @@ const socket = io()
 
 const scoreEl = document.querySelector('#scoreEl')
 
-const devicePixelRatio = window.devicePixelRatio || 1
+let devicePixelRatio = window.devicePixelRatio || 1
 
-canvas.width = 1024 * devicePixelRatio
-canvas.height = 576 * devicePixelRatio
- 
-c.scale(devicePixelRatio, devicePixelRatio)
+function resizeCanvas() {
+  devicePixelRatio = window.devicePixelRatio || 1
+  // Use full viewport size on smaller screens so mobile fills the display.
+  // Keep a maximum logical size of 1024x576 for larger screens.
+  let cssWidth = Math.min(1024, window.innerWidth)
+  let cssHeight = Math.min(576, window.innerHeight)
+
+  // Maintain 16:9 if possible, but fall back to full viewport when necessary
+  const aspect = 1024 / 576
+  if (cssWidth / cssHeight > aspect) {
+    cssWidth = Math.round(cssHeight * aspect)
+  } else {
+    cssHeight = Math.round(cssWidth / aspect)
+  }
+
+  canvas.width = Math.round(cssWidth * devicePixelRatio)
+  canvas.height = Math.round(cssHeight * devicePixelRatio)
+
+  // Set CSS size so the canvas displays at the intended logical size
+  canvas.style.width = cssWidth + 'px'
+  canvas.style.height = cssHeight + 'px'
+
+  // Reset transform and scale for high-DPR rendering
+  c.setTransform(devicePixelRatio, 0, 0, devicePixelRatio, 0, 0)
+}
+
+resizeCanvas()
+window.addEventListener('resize', () => {
+  resizeCanvas()
+})
+
+// Mobile mode - determined by user checkbox
+let IS_MOBILE = false
 
 // World boundaries
 const WORLD_WIDTH = 2048
@@ -22,6 +51,16 @@ let camera = null
 // Background image for tiling
 const bgImage = new Image()
 bgImage.src = '/img/webb-dark.png'
+
+// Joystick for mobile - will be initialized after canvas is ready
+let joystick = null
+
+// Debug state visible on-screen for devices without remote console
+window.DEBUG = window.DEBUG || {
+  lastTouch: null,
+  lastShoot: null,
+  mouseDown: false
+}
 
 const x = canvas.width / 2
 const y = canvas.height / 2
@@ -126,7 +165,11 @@ socket.on('updatePlayers', (backendPlayers) => {
       divToDelete.parentNode.removeChild(divToDelete)
 
       if (id === socket.id) {
-        document.querySelector('#usernameForm').style.display = 'block'
+        const usernameForm = document.querySelector('#usernameForm')
+        usernameForm.style.display = 'block'
+        if (usernameForm.parentElement) {
+          usernameForm.parentElement.style.display = 'flex'
+        }
       }
 
       delete frontEndPlayers[id]
@@ -148,6 +191,17 @@ function animate() {
     })
   }
   
+  // Initialize joystick if mobile and not already done
+  if (IS_MOBILE && !joystick && frontEndPlayers[socket.id]) {
+    joystick = new Joystick({
+      x: 80,
+      y: (canvas.height / devicePixelRatio) - 80,
+      radius: 60,
+      innerRadius: 30
+    })
+    console.log('Joystick initialized:', joystick)
+  }
+  
   // Update camera to follow player
   if (camera && frontEndPlayers[socket.id]) {
     const player = frontEndPlayers[socket.id]
@@ -167,12 +221,14 @@ function animate() {
   
   // Clear canvas with base color
   c.fillStyle = '#94a3b8'
-  c.fillRect(0, 0, canvas.width, canvas.height)
+  // Draw in CSS (logical) pixels — canvas.width/height are device pixels, so divide by DPR
+  c.fillRect(0, 0, canvas.width / devicePixelRatio, canvas.height / devicePixelRatio)
 
   // Save canvas state and apply camera translation
   c.save()
   if (camera) {
-    c.translate(-camera.x * devicePixelRatio, -camera.y * devicePixelRatio)
+    // transform already scales by devicePixelRatio via setTransform; translate in CSS pixels
+    c.translate(-camera.x, -camera.y)
   }
   
   // Draw tiled background image in world space
@@ -212,6 +268,13 @@ function animate() {
   
   // Restore canvas state
   c.restore()
+  
+  // Draw joystick on top (not affected by camera translation)
+  if (IS_MOBILE && joystick) {
+    joystick.draw(c)
+  }
+
+  // Debug overlay removed.
 }
 
 animate()
@@ -226,39 +289,65 @@ const keys = {
 const SPEED = 5
 const playerInputs = []
 let sequenceNumber = 0
+
+// Single movement loop that checks IS_MOBILE flag
 setInterval(() => {
-  if (keys.w.pressed) {
-     sequenceNumber++
-     playerInputs.push({sequenceNumber, dx: 0, dy: -SPEED})
-     frontEndPlayers[socket.id].y -= SPEED
-     socket.emit('keydown', {keycode:'KeyW', sequenceNumber})
+  if (!frontEndPlayers[socket.id]) return
+  
+  // Mobile joystick movement
+  if (IS_MOBILE && joystick) {
+    const input = joystick.getTouchInput()
+    if (input.magnitude > 0.1) {
+      sequenceNumber++
+      // Use magnitude to scale movement
+      const moveX = input.dx * (SPEED / joystick.radius)
+      const moveY = input.dy * (SPEED / joystick.radius)
 
+      playerInputs.push({ sequenceNumber, dx: moveX, dy: moveY })
+      // apply local prediction but clamp to world bounds to avoid server snap-back
+      frontEndPlayers[socket.id].x = Math.max(0, Math.min(WORLD_WIDTH, frontEndPlayers[socket.id].x + moveX))
+      frontEndPlayers[socket.id].y = Math.max(0, Math.min(WORLD_HEIGHT, frontEndPlayers[socket.id].y + moveY))
+      // send authoritative movement to server so backend updates match client prediction
+      socket.emit('move', { dx: moveX, dy: moveY, sequenceNumber })
+      
+      console.log('Joystick movement:', moveX, moveY)
+    }
   }
+  
+  // Desktop keyboard movement
+  if (!IS_MOBILE) {
+    if (keys.w.pressed) {
+      sequenceNumber++
+      playerInputs.push({ sequenceNumber, dx: 0, dy: -SPEED })
+      frontEndPlayers[socket.id].y = Math.max(0, frontEndPlayers[socket.id].y - SPEED)
+      socket.emit('keydown', { keycode: 'KeyW', sequenceNumber })
+    }
 
-  if (keys.a.pressed) {
-     sequenceNumber++
-     playerInputs.push({sequenceNumber, dx: -SPEED, dy: 0})
-     frontEndPlayers[socket.id].x -= SPEED
-     socket.emit('keydown',  {keycode:'KeyA', sequenceNumber})
-  }
+    if (keys.a.pressed) {
+      sequenceNumber++
+      playerInputs.push({ sequenceNumber, dx: -SPEED, dy: 0 })
+      frontEndPlayers[socket.id].x = Math.max(0, frontEndPlayers[socket.id].x - SPEED)
+      socket.emit('keydown', { keycode: 'KeyA', sequenceNumber })
+    }
 
-  if (keys.s.pressed) {
-     sequenceNumber++
-     playerInputs.push({sequenceNumber, dx: 0, dy: SPEED})
-     frontEndPlayers[socket.id].y += SPEED
-     socket.emit('keydown',  {keycode:'KeyS', sequenceNumber})
-  }
+    if (keys.s.pressed) {
+      sequenceNumber++
+      playerInputs.push({ sequenceNumber, dx: 0, dy: SPEED })
+      frontEndPlayers[socket.id].y = Math.min(WORLD_HEIGHT, frontEndPlayers[socket.id].y + SPEED)
+      socket.emit('keydown', { keycode: 'KeyS', sequenceNumber })
+    }
 
-  if (keys.d.pressed) {
-     sequenceNumber++
-     playerInputs.push({sequenceNumber, dx: SPEED, dy: 0})
-     frontEndPlayers[socket.id].x += SPEED
-     socket.emit('keydown',  {keycode:'KeyD', sequenceNumber})
+    if (keys.d.pressed) {
+      sequenceNumber++
+      playerInputs.push({ sequenceNumber, dx: SPEED, dy: 0 })
+      frontEndPlayers[socket.id].x = Math.min(WORLD_WIDTH, frontEndPlayers[socket.id].x + SPEED)
+      socket.emit('keydown', { keycode: 'KeyD', sequenceNumber })
+    }
   }
 }, 15) 
 
 window.addEventListener('keydown', (event) => {
-  if (!frontEndPlayers[socket.id]) return
+  if (!frontEndPlayers[socket.id] || IS_MOBILE) return
 
   switch(event.code) {
     case 'KeyW':
@@ -280,7 +369,7 @@ window.addEventListener('keydown', (event) => {
 })
 
 window.addEventListener('keyup', (event) => {
-   if (!frontEndPlayers[socket.id]) return
+   if (!frontEndPlayers[socket.id] || IS_MOBILE) return
 
   switch(event.code) {
     case 'KeyW':
@@ -304,7 +393,19 @@ window.addEventListener('keyup', (event) => {
 document.querySelector('#usernameForm').addEventListener('submit',
    (event) => {
   event.preventDefault()
-  document.querySelector('#usernameForm').style.display = 'none'
+  const usernameForm = document.querySelector('#usernameForm')
+  usernameForm.style.display = 'none'
+  // also hide the form container overlay so it doesn't block pointer events on the canvas
+  if (usernameForm.parentElement) {
+    usernameForm.parentElement.style.display = 'none'
+  }
+  
+  // Get mobile toggle checkbox value
+  const mobileToggle = document.querySelector('#mobileToggle')
+  IS_MOBILE = mobileToggle.checked
+  
+  console.log('IS_MOBILE:', IS_MOBILE)
+  
   socket.emit('initGame', {width: canvas.width,
     height: canvas.height,
     devicePixelRatio,

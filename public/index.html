@@ -1,5 +1,6 @@
 <html>
   <head>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
     <style>
       body {
     -webkit-font-smoothing: antialiased;
@@ -54,6 +55,16 @@
   "
 >
   <form id="usernameForm">
+    <div style="text-align: center; margin-bottom: 12px;">
+      <label style="display: flex; align-items: center; justify-content: center; color: #cbd5e1; cursor: pointer;">
+        <input
+          id="mobileToggle"
+          type="checkbox"
+          style="width: 18px; height: 18px; margin-right: 8px; cursor: pointer;"
+        />
+        <span>Mobile Controls (Joystick)</span>
+      </label>
+    </div>
     <div>
       <input
         id="usernameInput"
@@ -98,6 +109,7 @@
     ></script>
     <script src="https://cdn.socket.io/4.6.1/socket.io.min.js"></script>
     <script src="./js/classes/Camera.js"></script>
+    <script src="./js/classes/Joystick.js"></script>
     <script src="./js/classes/Enemy.js"></script>
     <script src="./js/classes/Player.js"></script>
     <script src="./js/classes/Particle.js"></script>
