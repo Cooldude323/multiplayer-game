@@ -9,12 +9,9 @@ let devicePixelRatio = window.devicePixelRatio || 1
 
 function resizeCanvas() {
   devicePixelRatio = window.devicePixelRatio || 1
-  // Use full viewport size on smaller screens so mobile fills the display.
-  // Keep a maximum logical size of 1024x576 for larger screens.
   let cssWidth = Math.min(1024, window.innerWidth)
   let cssHeight = Math.min(576, window.innerHeight)
 
-  // Maintain 16:9 if possible, but fall back to full viewport when necessary
   const aspect = 1024 / 576
   if (cssWidth / cssHeight > aspect) {
     cssWidth = Math.round(cssHeight * aspect)
@@ -25,11 +22,9 @@ function resizeCanvas() {
   canvas.width = Math.round(cssWidth * devicePixelRatio)
   canvas.height = Math.round(cssHeight * devicePixelRatio)
 
-  // Set CSS size so the canvas displays at the intended logical size
   canvas.style.width = cssWidth + 'px'
   canvas.style.height = cssHeight + 'px'
 
-  // Reset transform and scale for high-DPR rendering
   c.setTransform(devicePixelRatio, 0, 0, devicePixelRatio, 0, 0)
 }
 
@@ -38,7 +33,6 @@ window.addEventListener('resize', () => {
   resizeCanvas()
 })
 
-// Mobile mode - determined by user checkbox
 let IS_MOBILE = false
 
 // World boundaries
@@ -48,14 +42,12 @@ const WORLD_HEIGHT = 1536
 // Camera instance
 let camera = null
 
-// Background image for tiling
 const bgImage = new Image()
 bgImage.src = '/img/webb-dark.png'
 
-// Joystick for mobile - will be initialized after canvas is ready
+
 let joystick = null
 
-// Debug state visible on-screen for devices without remote console
 window.DEBUG = window.DEBUG || {
   lastTouch: null,
   lastShoot: null,
@@ -119,7 +111,6 @@ socket.on('updatePlayers', (backendPlayers) => {
       document.querySelector(
         `div[data-id="${id}"]`
       ).setAttribute('data-score', backEndPlayer.score)
-      // sorts layers divs
       const parentDiv = document.querySelector('#playerLabels')
       const childDivs = Array.from(parentDiv.querySelectorAll('div'))
 
@@ -128,11 +119,9 @@ socket.on('updatePlayers', (backendPlayers) => {
          const scoreB = Number(b.getAttribute('data-score'))
         return scoreB - scoreA
       })
-      // removes old elements
       childDivs.forEach(div => {
         parentDiv.removeChild(div)
       })
-      // adds sorted elements
       childDivs.forEach(div => {
         parentDiv.appendChild(div)
       })
@@ -158,7 +147,6 @@ socket.on('updatePlayers', (backendPlayers) => {
       }
     }
   }
-  // this is where frontend players are deleted
   for (const id in frontEndPlayers) {
     if (!backendPlayers[id]) {
       const divToDelete = document.querySelector(`div[data-id="${id}"]`)
@@ -181,7 +169,6 @@ let animationId
 function animate() {
   animationId = requestAnimationFrame(animate)
   
-  // Initialize camera if not already done
   if (!camera && frontEndPlayers[socket.id]) {
     camera = new Camera({
       x: 0,
@@ -191,7 +178,6 @@ function animate() {
     })
   }
   
-  // Initialize joystick if mobile and not already done
   if (IS_MOBILE && !joystick && frontEndPlayers[socket.id]) {
     joystick = new Joystick({
       x: 80,
@@ -202,7 +188,6 @@ function animate() {
     console.log('Joystick initialized:', joystick)
   }
   
-  // Update camera to follow player
   if (camera && frontEndPlayers[socket.id]) {
     const player = frontEndPlayers[socket.id]
     camera.x = player.x - (canvas.width / devicePixelRatio) / 2
@@ -219,19 +204,14 @@ function animate() {
     }
   }
   
-  // Clear canvas with base color
   c.fillStyle = '#94a3b8'
-  // Draw in CSS (logical) pixels — canvas.width/height are device pixels, so divide by DPR
   c.fillRect(0, 0, canvas.width / devicePixelRatio, canvas.height / devicePixelRatio)
 
-  // Save canvas state and apply camera translation
   c.save()
   if (camera) {
-    // transform already scales by devicePixelRatio via setTransform; translate in CSS pixels
     c.translate(-camera.x, -camera.y)
   }
   
-  // Draw tiled background image in world space
   if (camera && bgImage.complete) {
     const tileWidth = bgImage.width
     const tileHeight = bgImage.height
@@ -252,7 +232,6 @@ function animate() {
 
   for(const id in frontEndPlayers) {
     const frontEndPlayer = frontEndPlayers[id]
-    // linear interpolation
     if (frontEndPlayer.target) {
       frontEndPlayers[id].x += (frontEndPlayers[id].target.x - frontEndPlayers[id].x) * 0.5
       frontEndPlayers[id].y += (frontEndPlayers[id].target.y - frontEndPlayers[id].y) * 0.5
