@@ -18,12 +18,17 @@ app.get('/', (req, res) => {
 
 const backEndPlayers = {}
 const backEndProjectiles = {}
+const backEndCrates = {}
 const SPEED = 5
 const RADIUS = 10
 const PROJECTILE_RADIUS = 5 
 const WORLD_WIDTH = 2048
 const WORLD_HEIGHT = 1536
 let projectileId = 0
+let crateId = 0
+const MAX_CRATES = 10
+const CRATE_AMMO = 10
+const CRATE_RADIUS = 24
 
 io.on('connection', (socket) => {
   console.log('a user connected')
@@ -31,21 +36,31 @@ io.on('connection', (socket) => {
 
     io.emit('updatePlayers', backEndPlayers)
 
+    // send initial crates state to newly connected client
+    io.to(socket.id).emit('updateCrates', backEndCrates)
+
     
 
     socket.on('shoot', ({x, y, angle}) => {
+      const player = backEndPlayers[socket.id]
+      if (!player) return
+      // only allow shooting if player has ammo
+      if (!player.ammo || player.ammo <= 0) return
+      player.ammo -= 1
       projectileId++;
 
-         const velocity = {
-         x: Math.cos(angle) * 10,
-         y: Math.sin(angle) * 10
-          }
+      const velocity = {
+        x: Math.cos(angle) * 10,
+        y: Math.sin(angle) * 10
+      }
       backEndProjectiles[projectileId] = {
-        x, 
-        y, 
+        x,
+        y,
         velocity,
         playerId: socket.id
       }
+      // update clients with new ammo immediately
+      io.emit('updatePlayers', backEndPlayers)
 
     })
 
@@ -57,6 +72,7 @@ io.on('connection', (socket) => {
      color: `hsl(${360 * Math.random()}, 100%, 50%)`,
      sequenceNumber: 0,
      score: 0,
+     ammo: 50,
      username
     }
      // where we init canvas
@@ -129,8 +145,42 @@ io.on('connection', (socket) => {
       if (playerSides.right > WORLD_WIDTH) backEndPlayer.x = WORLD_WIDTH - backEndPlayer.radius
       if (playerSides.top < 0) backEndPlayer.y = backEndPlayer.radius
       if (playerSides.bottom > WORLD_HEIGHT) backEndPlayer.y = WORLD_HEIGHT - backEndPlayer.radius
+
+      // check crate pickup collisions
+      for (const cid in backEndCrates) {
+        const crate = backEndCrates[cid]
+        const dist = Math.hypot(crate.x - backEndPlayer.x, crate.y - backEndPlayer.y)
+        if (dist < backEndPlayer.radius + CRATE_RADIUS) {
+          // pickup
+            backEndPlayer.ammo = (backEndPlayer.ammo || 0) + CRATE_AMMO
+          // cap ammo to 100
+          backEndPlayer.ammo = Math.min(100, backEndPlayer.ammo)
+          // remove crate and spawn a new one
+            console.log(`Player ${socket.id} picked crate ${cid}. New ammo: ${backEndPlayer.ammo}`)
+            delete backEndCrates[cid]
+            spawnCrate()
+          // notify clients immediately about updated crates/players
+          io.emit('updateCrates', backEndCrates)
+          io.emit('updatePlayers', backEndPlayers)
+          break
+        }
+      }
     })
 })
+
+// spawn crate helper
+function spawnCrate() {
+  crateId++
+  // place away from edges
+  const margin = 20
+  const x = Math.floor(Math.random() * (WORLD_WIDTH - margin * 2)) + margin
+  const y = Math.floor(Math.random() * (WORLD_HEIGHT - margin * 2)) + margin
+  backEndCrates[crateId] = { id: crateId, x, y }
+  console.log(`spawned crate ${crateId} at ${x},${y}`)
+}
+
+// ensure initial crates exist
+for (let i = 0; i < MAX_CRATES; i++) spawnCrate()
 // backend ticker
 setInterval(() => {
 
@@ -176,8 +226,29 @@ setInterval(() => {
       }
   }
 
+  // Check crate pickups for all players (covers keyboard and joystick movement)
+  for (const playerId in backEndPlayers) {
+    const backEndPlayer = backEndPlayers[playerId]
+    for (const cid in backEndCrates) {
+      const crate = backEndCrates[cid]
+      const dist = Math.hypot(crate.x - backEndPlayer.x, crate.y - backEndPlayer.y)
+      if (dist < (backEndPlayer.radius || RADIUS) + CRATE_RADIUS) {
+        backEndPlayer.ammo = (backEndPlayer.ammo || 0) + CRATE_AMMO
+        backEndPlayer.ammo = Math.min(100, backEndPlayer.ammo)
+        console.log(`Player ${playerId} picked crate ${cid} (ticker). New ammo: ${backEndPlayer.ammo}`)
+        delete backEndCrates[cid]
+        spawnCrate()
+        // notify clients about this immediate change
+        io.emit('updateCrates', backEndCrates)
+        io.emit('updatePlayers', backEndPlayers)
+        break
+      }
+    }
+  }
+
   io.emit('updatePlayers', backEndPlayers)
   io.emit('updateProjectiles', backEndProjectiles)
+  io.emit('updateCrates', backEndCrates)
 }, 15)
 
 

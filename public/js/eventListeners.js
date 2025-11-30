@@ -32,11 +32,22 @@ if (!IS_MOBILE) {
       const last = window.__lastShootAt
       const dist = window.DEBUG && window.DEBUG.lastShoot ? Math.hypot(window.DEBUG.lastShoot.x - worldCoords.x, window.DEBUG.lastShoot.y - worldCoords.y) : Infinity
       if (!(now - last < 250 && dist < 10)) {
-        socket.emit('shoot',{
-          x: playerPosition.x,
-          y: playerPosition.y,
-          angle
-        })
+        // client-side check/optimistic update of ammo
+        try {
+          const me = frontEndPlayers[socket.id]
+          if (!me || (me.ammo || 0) <= 0) {
+            console.log('No ammo - shoot blocked')
+          } else {
+            me.ammo = Math.max(0, (me.ammo || 0) - 1)
+            socket.emit('shoot',{
+              x: playerPosition.x,
+              y: playerPosition.y,
+              angle
+            })
+          }
+        } catch(e) {
+          socket.emit('shoot',{ x: playerPosition.x, y: playerPosition.y, angle })
+        }
         window.__lastShootAt = now
         try { window.DEBUG.lastShoot = { x: worldCoords.x, y: worldCoords.y, angle }; window.DEBUG.lastShootAt = now } catch(e) {}
       } else {
@@ -103,14 +114,25 @@ canvasEl.addEventListener('touchstart', (event) => {
         const last = window.__lastShootAt
         const dist = window.DEBUG && window.DEBUG.lastShoot ? Math.hypot(window.DEBUG.lastShoot.x - worldCoords.x, window.DEBUG.lastShoot.y - worldCoords.y) : Infinity
         if (!(now - last < 250 && dist < 10)) {
-          socket.emit('shoot',{
-            x: playerPosition.x,
-            y: playerPosition.y,
-            angle
-          })
-          window.__lastShootAt = now
-          try { window.DEBUG.lastShoot = { x: worldCoords.x, y: worldCoords.y, angle }; window.DEBUG.lastShootAt = now } catch(e) {}
-          console.log('Mobile shoot fired')
+          try {
+            const me = frontEndPlayers[socket.id]
+            if (!me || (me.ammo || 0) <= 0) {
+              console.log('No ammo - shoot blocked')
+            } else {
+              me.ammo = Math.max(0, (me.ammo || 0) - 1)
+              socket.emit('shoot',{
+                x: playerPosition.x,
+                y: playerPosition.y,
+                angle
+              })
+              window.__lastShootAt = now
+              try { window.DEBUG.lastShoot = { x: worldCoords.x, y: worldCoords.y, angle }; window.DEBUG.lastShootAt = now } catch(e) {}
+              console.log('Mobile shoot fired')
+            }
+          } catch(e) {
+            socket.emit('shoot',{ x: playerPosition.x, y: playerPosition.y, angle })
+            console.log('Mobile shoot fired (fallback)')
+          }
         } else {
           console.log('Mobile shoot suppressed (debounce)')
         }

@@ -38,6 +38,7 @@ let IS_MOBILE = false
 // World boundaries
 const WORLD_WIDTH = 2048
 const WORLD_HEIGHT = 1536
+const CRATE_DRAW_SIZE = 28
 
 // Camera instance
 let camera = null
@@ -59,6 +60,10 @@ const y = canvas.height / 2
 
 const frontEndPlayers = {}
 const frontEndProjectiles = {}
+const frontEndCrates = {}
+
+const crateImage = new Image()
+crateImage.src = '/img/vecteezy_ammunition-vector-icon_19542811.jpg'
 
 
 
@@ -88,6 +93,7 @@ socket.on('updateProjectiles', (backEndProjectiles) => {
 })
 
 socket.on('updatePlayers', (backendPlayers) => {
+  console.log('updatePlayers received', Object.keys(backendPlayers).length, backendPlayers[socket.id] ? `me ammo=${backendPlayers[socket.id].ammo}` : '')
   for (const id in backendPlayers) {
     const backEndPlayer = backendPlayers[id]
 
@@ -99,6 +105,7 @@ socket.on('updatePlayers', (backendPlayers) => {
       color: backEndPlayer.color,
       username: backEndPlayer.username
       })
+      frontEndPlayers[id].ammo = backEndPlayer.ammo || 0
 
       document.querySelector(
         '#playerLabels'
@@ -126,10 +133,15 @@ socket.on('updatePlayers', (backendPlayers) => {
         parentDiv.appendChild(div)
       })
 
+      // ensure ammo stays in sync for existing players
+      frontEndPlayers[id].ammo = backEndPlayer.ammo || 0
+
       frontEndPlayers[id].target = {
         x: backEndPlayer.x,
         y: backEndPlayer.y
       }
+      // keep ammo in sync
+      frontEndPlayers[id].ammo = backEndPlayer.ammo || 0
 
 
       if (id === socket.id) {
@@ -162,6 +174,15 @@ socket.on('updatePlayers', (backendPlayers) => {
 
       delete frontEndPlayers[id]
     }
+  }
+})
+
+socket.on('updateCrates', (crates) => {
+  console.log('updateCrates received', Object.keys(crates).length)
+  // replace local crates map
+  for (const k in frontEndCrates) delete frontEndCrates[k]
+  for (const id in crates) {
+    frontEndCrates[id] = crates[id]
   }
 })
 
@@ -230,6 +251,16 @@ function animate() {
     }
   }
 
+  // Draw crates in world space
+  if (camera && crateImage.complete) {
+    const size = CRATE_DRAW_SIZE || 24
+    for (const id in frontEndCrates) {
+      const crate = frontEndCrates[id]
+      // draw centered
+      c.drawImage(crateImage, crate.x - size / 2, crate.y - size / 2, size, size)
+    }
+  }
+
   for(const id in frontEndPlayers) {
     const frontEndPlayer = frontEndPlayers[id]
     if (frontEndPlayer.target) {
@@ -249,6 +280,24 @@ function animate() {
   c.restore()
   
   // Draw joystick on top (not affected by camera translation)
+  // Draw ammo HUD for local player in top-right (so leaderboard doesn't cover it)
+  try {
+    const me = frontEndPlayers[socket.id]
+    if (me) {
+      const cssWidth = canvas.width / devicePixelRatio
+      const padding = 12
+      const boxW = 110
+      const boxH = 32
+      const x = cssWidth - boxW - padding
+      const y = padding
+      c.fillStyle = 'rgba(0,0,0,0.6)'
+      c.fillRect(x, y, boxW, boxH)
+      c.fillStyle = '#fff'
+      c.font = '14px sans-serif'
+      c.fillText(`Ammo: ${me.ammo || 0}`, x + 10, y + 22)
+    }
+  } catch (e) {}
+
   if (IS_MOBILE && joystick) {
     joystick.draw(c)
   }
