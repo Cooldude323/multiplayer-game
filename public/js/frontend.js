@@ -254,11 +254,13 @@ function animate() {
   // Draw crates in world space
   if (camera && crateImage.complete) {
     const size = CRATE_DRAW_SIZE || 24
+    c.globalCompositeOperation = 'multiply'
     for (const id in frontEndCrates) {
       const crate = frontEndCrates[id]
       // draw centered
       c.drawImage(crateImage, crate.x - size / 2, crate.y - size / 2, size, size)
     }
+    c.globalCompositeOperation = 'source-over'
   }
 
   for(const id in frontEndPlayers) {
